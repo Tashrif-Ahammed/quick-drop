@@ -52,17 +52,14 @@ button:hover{border-color:var(--acc)}
 
 <script>
 /* ====== CONFIG ======
-   First deploy er por page ekbar khulle URL e #id boshe jabe.
-   Oi pura URL bookmark koro. Chaile oi id ta niche BLOB_ID te boshao,
-   tahole shob device e shundor chhoto URL e kaj korbe. */
-const BLOB_ID = "";   // KVdb bucket id (chaile shob device er jonno ekhane boshao)
-const KV = "https://kvdb.io";
+   Firebase Realtime Database URL ekhane boshao (setup niche README te).
+   Example: "https://my-drop-default-rtdb.firebaseio.com" (shesh e / debe na) */
+const DB_URL = "";
 const UPLOAD_API = "https://upload.gofile.io/uploadfile";
 /* ==================== */
 
 const $ = s => document.querySelector(s);
 const statusEl = $("#status");
-let blobId = BLOB_ID || location.hash.slice(1);
 
 function say(t){ statusEl.textContent = t; }
 async function F(label,url,opts){
@@ -71,34 +68,24 @@ async function F(label,url,opts){
 }
 function size(n){ if(n<1024) return n+" B"; if(n<1048576) return (n/1024).toFixed(1)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
 
-async function ensureBlob(){
-  if(blobId) return;
-  const email = prompt("Ekbar setup: ekta email dao (KVdb bucket banate lage, ekbar-i):");
-  if(!email) throw new Error("Email chhara bucket hobe na");
-  const r = await F("Bucket create",KV,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"email="+encodeURIComponent(email)});
-  const id = (await r.text()).trim();
-  if(!r.ok || !id || id.length>60) throw new Error("Bucket create fail: "+id.slice(0,80));
-  blobId = id;
-  location.hash = blobId;
-}
 async function load(){
-  if(!blobId) return [];
-  const r = await F("List load",KV+"/"+blobId+"/files?t="+Date.now());
-  if(r.status===404) return [];
-  if(!r.ok) throw new Error("List load hoy nai ("+r.status+")");
-  try{ return JSON.parse(await r.text()) || []; }catch(e){ return []; }
+  const r = await F("List load",DB_URL+"/files.json?t="+Date.now());
+  if(!r.ok) throw new Error("List load hoy nai ("+r.status+"). Rules check koro.");
+  const o = await r.json();
+  return o ? Object.entries(o).map(([k,v])=>({...v,key:k})).sort((x,y)=>(x.t||0)-(y.t||0)) : [];
 }
-async function save(files){
-  const r = await F("List save",KV+"/"+blobId+"/files",{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(files)});
-  if(!r.ok) throw new Error("List save hoy nai ("+r.status+")");
+async function add(rec){
+  const r = await F("List save",DB_URL+"/files.json",{method:"POST",body:JSON.stringify(rec)});
+  if(!r.ok) throw new Error("List save hoy nai ("+r.status+"). Rules check koro.");
 }
-async function mutate(fn){
-  const files = await load();
-  await save(fn(files));
+async function remove(key){
+  const r = await F("List delete",DB_URL+"/files/"+key+".json",{method:"DELETE"});
+  if(!r.ok) throw new Error("Delete hoy nai ("+r.status+")");
 }
 
 async function render(){
   const box = $("#list");
+  if(!DB_URL){ box.innerHTML = '<div class="empty">DB_URL set kora nai. index.html er CONFIG e Firebase URL boshao.</div>'; return; }
   try{
     const files = await load();
     if(!files.length){ box.innerHTML = '<div class="empty">Kono file nai</div>'; return; }
@@ -108,7 +95,7 @@ async function render(){
       const a = document.createElement("a"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = f.name;
       const m = document.createElement("span"); m.className = "meta"; m.textContent = size(f.size||0);
       const x = document.createElement("button"); x.textContent = "✕"; x.title = "List theke soro";
-      x.onclick = async()=>{ if(!confirm("List theke soraba?")) return; await mutate(l=>l.filter(i=>i.id!==f.id)); render(); };
+      x.onclick = async()=>{ if(!confirm("List theke soraba?")) return; try{ await remove(f.key); }catch(e){ say(e.message); } render(); };
       d.append(a,m,x); box.append(d);
     });
   }catch(e){ box.innerHTML = '<div class="empty">'+e.message+'</div>'; }
@@ -123,12 +110,13 @@ async function uploadOne(file){
 }
 async function handle(fileList){
   const arr = [...fileList]; if(!arr.length) return;
+  if(!DB_URL){ say("Age DB_URL set koro"); return; }
   try{
-    await ensureBlob();
+    
     for(let i=0;i<arr.length;i++){
       say("Upload hochche ("+(i+1)+"/"+arr.length+"): "+arr[i].name);
       const rec = await uploadOne(arr[i]);
-      await mutate(l=>[...l,rec]);
+      await add(rec);
     }
     say("Done ✓");
   }catch(e){ say("Error: "+e.message); }
@@ -145,12 +133,11 @@ window.addEventListener("paste",e=>{ if(e.clipboardData.files.length) handle(e.c
 $("#refresh").onclick = render;
 
 function drawQR(){
-  const u = BLOB_ID ? location.href.split("#")[0] : location.href;
+  const u = location.href.split("#")[0];
   $("#url").textContent = u;
   $("#qr").innerHTML = "";
   if(window.QRCode) new QRCode($("#qr"),{text:u,width:120,height:120});
 }
-window.addEventListener("hashchange",()=>{ blobId = BLOB_ID || location.hash.slice(1); render(); drawQR(); });
 render(); drawQR();
 </script>
 </body>
