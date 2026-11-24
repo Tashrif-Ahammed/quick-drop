@@ -3,7 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quick Drop</title>
+<title>Tashrif Quick Drop - Public File Drop and Share</title>
+<meta name="description" content="Tashrif Quick Drop is a simple public file drop. Upload files and download them on any device using a link or QR code. No login required.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#6366f1">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tashrif Quick Drop - Public File Drop and Share">
+<meta property="og:description" content="Upload files and download them on any device using a link or QR code. No login required.">
+<meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4m0 0L7 9m5-5 5 5'/%3E%3Cpath d='M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -137,6 +144,8 @@ textarea:focus,select:focus,.search input:focus{border-color:var(--a1);box-shado
 
 /* skeleton / empty */
 .sk{height:178px;border-radius:18px;border:1px solid var(--bd);background:linear-gradient(100deg,var(--card) 30%,var(--soft) 50%,var(--card) 70%);background-size:200% 100%;animation:shim 1.4s linear infinite}
+footer{margin-top:48px;text-align:center;color:var(--mut);font-size:12.5px;line-height:1.6}
+footer b{color:var(--fg)}
 .empty{grid-column:1/-1;text-align:center;padding:50px 16px;color:var(--mut);animation:up .5s both}
 .empty .em{display:block;margin-bottom:10px;animation:float 3s ease-in-out infinite}
 .empty .em svg{width:52px;height:52px;stroke:var(--mut);fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
@@ -240,6 +249,10 @@ textarea:focus,select:focus,.search input:focus{border-color:var(--a1);box-shado
   <div class="chips" id="chips"></div>
   <div class="sync"><span class="dot" id="dot"></span><span id="syncT">Connecting...</span></div>
   <div id="grid" style="margin-top:14px"></div>
+  <footer>
+    <b>Tashrif Quick Drop</b><br>
+    A simple public file drop for moving files between devices. Upload a file, then open this page on any device and download it with a link or QR code. No account or login required.
+  </footer>
 </main>
 
 <div id="mask"><div id="modal"></div></div>
