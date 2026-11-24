@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://Tashrif-Ahammed.github.io/quick-drop/sitemap.xml
