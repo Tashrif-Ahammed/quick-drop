@@ -1,0 +1,160 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick Drop</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14171c;--mut:#6b7280;--acc:#2563eb;--bd:#e5e7eb}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b21;--fg:#eceef2;--mut:#8b93a1;--acc:#5b8cff;--bd:#272b34}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mut);font-size:14px;margin-bottom:20px}
+#drop{border:2px dashed var(--bd);background:var(--card);border-radius:14px;padding:44px 16px;text-align:center;cursor:pointer;transition:.15s}
+#drop.over{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 8%,var(--card))}
+#drop b{display:block;font-size:17px;margin-bottom:6px}
+#drop span{color:var(--mut);font-size:14px}
+#status{margin:12px 0;font-size:14px;color:var(--mut);min-height:20px}
+.item{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.item a{flex:1;color:var(--fg);text-decoration:none;word-break:break-all;font-weight:500}
+.item a:hover{color:var(--acc)}
+.meta{color:var(--mut);font-size:12px;white-space:nowrap}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:22px 0 10px}
+.row h2{font-size:15px;margin:0}
+#qrbox{display:flex;gap:16px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-top:26px}
+#qr{background:#fff;padding:6px;border-radius:8px;line-height:0}
+#url{font-size:13px;color:var(--mut);word-break:break-all}
+.empty{color:var(--mut);text-align:center;padding:24px;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Quick Drop</h1>
+  <div class="sub">File drop koro, link/QR diye jekono device theke nao.</div>
+
+  <div id="drop"><b>File ekhane drop koro ba click koro</b><span>Ek shathe onek file dewa jay</span></div>
+  <input type="file" id="pick" multiple hidden>
+  <div id="status"></div>
+
+  <div class="row"><h2>Files</h2><button id="refresh">Refresh</button></div>
+  <div id="list"></div>
+
+  <div id="qrbox">
+    <div id="qr"></div>
+    <div><div style="font-weight:600;margin-bottom:4px">Ei page er QR</div><div id="url"></div></div>
+  </div>
+</main>
+
+<script>
+/* ====== CONFIG ======
+   First deploy er por page ekbar khulle URL e #id boshe jabe.
+   Oi pura URL bookmark koro. Chaile oi id ta niche BLOB_ID te boshao,
+   tahole shob device e shundor chhoto URL e kaj korbe. */
+const BLOB_ID = "";   // KVdb bucket id (chaile shob device er jonno ekhane boshao)
+const KV = "https://kvdb.io";
+const UPLOAD_API = "https://upload.gofile.io/uploadfile";
+/* ==================== */
+
+const $ = s => document.querySelector(s);
+const statusEl = $("#status");
+let blobId = BLOB_ID || location.hash.slice(1);
+
+function say(t){ statusEl.textContent = t; }
+async function F(label,url,opts){
+  try{ return await fetch(url,opts); }
+  catch(e){ throw new Error(label+" step e connect hoy nai (CORS/network/adblock)"); }
+}
+function size(n){ if(n<1024) return n+" B"; if(n<1048576) return (n/1024).toFixed(1)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
+
+async function ensureBlob(){
+  if(blobId) return;
+  const email = prompt("Ekbar setup: ekta email dao (KVdb bucket banate lage, ekbar-i):");
+  if(!email) throw new Error("Email chhara bucket hobe na");
+  const r = await F("Bucket create",KV,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"email="+encodeURIComponent(email)});
+  const id = (await r.text()).trim();
+  if(!r.ok || !id || id.length>60) throw new Error("Bucket create fail: "+id.slice(0,80));
+  blobId = id;
+  location.hash = blobId;
+}
+async function load(){
+  if(!blobId) return [];
+  const r = await F("List load",KV+"/"+blobId+"/files?t="+Date.now());
+  if(r.status===404) return [];
+  if(!r.ok) throw new Error("List load hoy nai ("+r.status+")");
+  try{ return JSON.parse(await r.text()) || []; }catch(e){ return []; }
+}
+async function save(files){
+  const r = await F("List save",KV+"/"+blobId+"/files",{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(files)});
+  if(!r.ok) throw new Error("List save hoy nai ("+r.status+")");
+}
+async function mutate(fn){
+  const files = await load();
+  await save(fn(files));
+}
+
+async function render(){
+  const box = $("#list");
+  try{
+    const files = await load();
+    if(!files.length){ box.innerHTML = '<div class="empty">Kono file nai</div>'; return; }
+    box.innerHTML = "";
+    files.slice().reverse().forEach(f=>{
+      const d = document.createElement("div"); d.className = "item";
+      const a = document.createElement("a"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = f.name;
+      const m = document.createElement("span"); m.className = "meta"; m.textContent = size(f.size||0);
+      const x = document.createElement("button"); x.textContent = "✕"; x.title = "List theke soro";
+      x.onclick = async()=>{ if(!confirm("List theke soraba?")) return; await mutate(l=>l.filter(i=>i.id!==f.id)); render(); };
+      d.append(a,m,x); box.append(d);
+    });
+  }catch(e){ box.innerHTML = '<div class="empty">'+e.message+'</div>'; }
+}
+
+async function uploadOne(file){
+  const fd = new FormData(); fd.append("file", file);
+  const r = await F("File upload (Gofile)",UPLOAD_API,{method:"POST",body:fd});
+  const j = await r.json();
+  if(j.status!=="ok") throw new Error("Upload fail: "+file.name);
+  return {id:Date.now()+"-"+Math.random().toString(36).slice(2,7),name:file.name,size:file.size,url:j.data.downloadPage,t:Date.now()};
+}
+async function handle(fileList){
+  const arr = [...fileList]; if(!arr.length) return;
+  try{
+    await ensureBlob();
+    for(let i=0;i<arr.length;i++){
+      say("Upload hochche ("+(i+1)+"/"+arr.length+"): "+arr[i].name);
+      const rec = await uploadOne(arr[i]);
+      await mutate(l=>[...l,rec]);
+    }
+    say("Done ✓");
+  }catch(e){ say("Error: "+e.message); }
+  render(); drawQR();
+}
+
+const drop = $("#drop"), pick = $("#pick");
+drop.onclick = ()=>pick.click();
+pick.onchange = ()=>{ handle(pick.files); pick.value=""; };
+["dragenter","dragover"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>handle(e.dataTransfer.files));
+window.addEventListener("paste",e=>{ if(e.clipboardData.files.length) handle(e.clipboardData.files); });
+$("#refresh").onclick = render;
+
+function drawQR(){
+  const u = BLOB_ID ? location.href.split("#")[0] : location.href;
+  $("#url").textContent = u;
+  $("#qr").innerHTML = "";
+  if(window.QRCode) new QRCode($("#qr"),{text:u,width:120,height:120});
+}
+window.addEventListener("hashchange",()=>{ blobId = BLOB_ID || location.hash.slice(1); render(); drawQR(); });
+render(); drawQR();
+</script>
+</body>
+</html>
+
+
+
